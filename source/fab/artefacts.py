@@ -160,7 +160,7 @@ class FilterBuildTrees(ArtefactsGetter):
 
 class ArtefactStore(dict):
     '''This object stores artefacts (which can be of any type). Each artefact
-    is index by a string.
+    is indexed by a string.
     '''
 
     FORTRAN_BUILD_FILES = "fortran_build_files"
