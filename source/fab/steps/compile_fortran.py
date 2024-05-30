@@ -18,7 +18,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from itertools import chain
 from pathlib import Path
-from typing import List, Set, Dict, Tuple, Optional, Union, Callable
+from typing import List, Set, Dict, Tuple, Optional, Union
 
 from fab.artefacts import ArtefactsGetter, FilterBuildTrees
 from fab.build_config import BuildConfig, FlagsConfig
@@ -43,13 +43,11 @@ class MpCommonArgs():
     flags: FlagsConfig
     mod_hashes: Dict[str, int]
     syntax_only: bool
-    get_compiler: Optional[Callable[[Path, BuildConfig], Compiler]]
 
 
 @step
 def compile_fortran(config: BuildConfig, common_flags: Optional[List[str]] = None,
-                    path_flags: Optional[List] = None, source: Optional[ArtefactsGetter] = None,
-                    get_compiler: Optional[Callable[[Path, BuildConfig], Compiler]] = None):
+                    path_flags: Optional[List] = None, source: Optional[ArtefactsGetter] = None):
     """
     Compiles all Fortran files in all build trees, creating/extending a set of compiled files for each build target.
 
@@ -85,8 +83,7 @@ def compile_fortran(config: BuildConfig, common_flags: Optional[List[str]] = Non
     # build the arguments passed to the multiprocessing function
     mp_common_args = MpCommonArgs(
         config=config, flags=flags_config,
-        mod_hashes=mod_hashes, syntax_only=syntax_only,
-        get_compiler=get_compiler)
+        mod_hashes=mod_hashes, syntax_only=syntax_only)
 
     # compile everything in multiple passes
     compiled: Dict[Path, CompiledFile] = {}
@@ -336,8 +333,7 @@ def compile_file(analysed_file, flags, output_fpath, mp_common_args):
 
     # tool
     config = mp_common_args.config
-    print('analysed_file=', analysed_file)
-    compiler = mp_common_args.get_compiler(fpath=analysed_file, config=config)
+    compiler = config.tool_box[Categories.FORTRAN_COMPILER]
 
     compiler.compile_file(input_file=analysed_file, output_file=output_fpath,
                           add_flags=flags,
