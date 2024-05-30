@@ -10,25 +10,38 @@ classes for gcc, gfortran, icc, ifort
 
 import os
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 import zlib
 
-from fab.newtools.categories import Categories
-from fab.newtools.flags import Flags
-from fab.newtools.tool import VendorTool
+from fab.tools.categories import Categories
+from fab.tools.flags import Flags
+from fab.tools.tool import VendorTool
 
 
 class Compiler(VendorTool):
     '''This is the base class for any compiler. It provides flags for
+
     - compilation only (-c),
     - naming the output file (-o),
     - OpenMP
+
+    :param name: name of the compiler.
+    :param exec_name: name of the executable to start.
+    :param vendor: name of the compiler vendor.
+    :param category: the Category (C_COMPILER or FORTRAN_COMPILER).
+    :param compile_flag: the compilation flag to use when only requesting
+        compilation (not linking).
+    :param output_flag: the compilation flag to use to indicate the name
+        of the output file
+    :param omp_flag: the flag to use to enable OpenMP
     '''
 
     # pylint: disable=too-many-arguments
     def __init__(self, name: str, exec_name: str, vendor: str,
-                 category: Categories, compile_flag=None,
-                 output_flag=None, omp_flag=None):
+                 category: Categories,
+                 compile_flag: Optional[str] = None,
+                 output_flag: Optional[str] = None,
+                 omp_flag: Optional[str] = None):
         super().__init__(name, exec_name, vendor, category)
         self._version = None
         self._compile_flag = compile_flag if compile_flag else "-c"
@@ -44,13 +57,19 @@ class Compiler(VendorTool):
 
     def compile_file(self, input_file: Path, output_file: Path,
                      add_flags: Union[None, List[str]] = None):
-        '''Compiles a file.
+        '''Compiles a file. It will add the flag for compilation-only
+        automatically, as well as the output directives. The current working
+        directory for the command is set to the folder where the source file
+        lives when compile_file is called. This is done to stop the compiler
+        inserting folder information into the mod files, which would cause
+        them to have different checksums depending on where they live.
+
         :param input_file: the path of the input file.
         :param outpout_file: the path of the output file.
         :param add_flags: additional compiler flags.
         '''
 
-        params = [self._compile_flag]
+        params: List[Union[Path, str]] = [self._compile_flag]
         if add_flags:
             params += add_flags
 
@@ -60,9 +79,10 @@ class Compiler(VendorTool):
         return self.run(cwd=input_file.parent,
                         additional_parameters=params)
 
-    def check_available(self):
-        '''Checks if the compiler is available. We do this by requesting the
-        compiler version.
+    def check_available(self) -> bool:
+        '''
+        :returns: whether the compiler is available or not. We do
+            this by requesting the compiler version.
         '''
         try:
             version = self.get_version()
@@ -132,8 +152,19 @@ class Compiler(VendorTool):
 class CCompiler(Compiler):
     '''This is the base class for a C compiler. It just sets the category
     of the compiler as convenience.
+
+    :param name: name of the compiler.
+    :param exec_name: name of the executable to start.
+    :param vendor: name of the compiler vendor.
+    :param category: the Category (C_COMPILER or FORTRAN_COMPILER).
+    :param compile_flag: the compilation flag to use when only requesting
+        compilation (not linking).
+    :param output_flag: the compilation flag to use to indicate the name
+        of the output file
+    :param omp_flag: the flag to use to enable OpenMP
     '''
 
+    # pylint: disable=too-many-arguments
     def __init__(self, name: str, exec_name: str, vendor: str,
                  compile_flag=None, output_flag=None, omp_flag=None):
         super().__init__(name, exec_name, vendor, Categories.C_COMPILER,
@@ -145,8 +176,22 @@ class FortranCompiler(Compiler):
     '''This is the base class for a Fortran compiler. It is a compiler
     that needs to support a module output path and support for syntax-only
     compilation (which will only generate the .mod files).
+
+    :param name: name of the compiler.
+    :param exec_name: name of the executable to start.
+    :param vendor: name of the compiler vendor.
+    :param module_folder_flag: the compiler flag to indicate where to
+        store created module files.
+    :param syntax_only_flag: flag to indicate to only do a syntax check.
+        The side effect is that the module files are created.
+    :param compile_flag: the compilation flag to use when only requesting
+        compilation (not linking).
+    :param output_flag: the compilation flag to use to indicate the name
+        of the output file
+    :param omp_flag: the flag to use to enable OpenMP
     '''
 
+    # pylint: disable=too-many-arguments
     def __init__(self, name: str, exec_name: str, vendor: str,
                  module_folder_flag: str, syntax_only_flag=None,
                  compile_flag=None, output_flag=None, omp_flag=None):
@@ -164,6 +209,7 @@ class FortranCompiler(Compiler):
 
     def set_module_output_path(self, path: Path):
         '''Sets the output path for modules.
+
         :params path: the path to the output directory.
         '''
         self._module_output_path = str(path)
@@ -171,6 +217,15 @@ class FortranCompiler(Compiler):
     def compile_file(self, input_file: Path, output_file: Path,
                      add_flags: Union[None, List[str]] = None,
                      syntax_only: bool = False):
+        '''Compiles a file.
+
+        :param input_file: the name of the input file.
+        :param output_file: the name of the output file.
+        :param add_flags: additional flags for the compiler.
+        :param syntax_only: if set, the compiler will only do
+            a syntax check
+        '''
+
         params: List[str] = []
         if add_flags:
             new_flags = Flags(add_flags)
@@ -191,17 +246,27 @@ class FortranCompiler(Compiler):
 # ============================================================================
 class Gcc(CCompiler):
     '''Class for GNU's gcc compiler.
+
+    :param name: name of this compiler.
+    :param exec_name: name of the executable.
     '''
-    def __init__(self):
-        super().__init__("gcc", "gcc", "gnu", omp_flag="-fopenmp")
+    def __init__(self,
+                 name: str = "gcc",
+                 exec_name: str = "gcc"):
+        super().__init__(name, exec_name, "gnu", omp_flag="-fopenmp")
 
 
 # ============================================================================
 class Gfortran(FortranCompiler):
     '''Class for GNU's gfortran compiler.
+
+    :param name: name of this compiler.
+    :param exec_name: name of the executable.
     '''
-    def __init__(self):
-        super().__init__("gfortran", "gfortran", "gnu",
+    def __init__(self,
+                 name: str = "gfortran",
+                 exec_name: str = "gfortran"):
+        super().__init__(name, exec_name, "gnu",
                          module_folder_flag="-J",
                          omp_flag="-fopenmp",
                          syntax_only_flag="-fsyntax-only")
@@ -210,17 +275,27 @@ class Gfortran(FortranCompiler):
 # ============================================================================
 class Icc(CCompiler):
     '''Class for the Intel's icc compiler.
+
+    :param name: name of this compiler.
+    :param exec_name: name of the executable.
     '''
-    def __init__(self):
-        super().__init__("icc", "icc", "intel", omp_flag="-qopenmp")
+    def __init__(self,
+                 name: str = "icc",
+                 exec_name: str = "icc"):
+        super().__init__(name, exec_name, "intel", omp_flag="-qopenmp")
 
 
 # ============================================================================
 class Ifort(FortranCompiler):
     '''Class for Intel's ifort compiler.
+
+    :param name: name of this compiler.
+    :param exec_name: name of the executable.
     '''
-    def __init__(self):
-        super().__init__("ifort", "ifort", "intel",
+    def __init__(self,
+                 name: str = "ifort",
+                 exec_name: str = "ifort"):
+        super().__init__(name, exec_name, "intel",
                          module_folder_flag="-module",
                          omp_flag="-qopenmp",
                          syntax_only_flag="-syntax-only")

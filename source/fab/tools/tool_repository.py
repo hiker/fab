@@ -14,8 +14,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Type
 
-from fab.newtools import (Categories, Cpp, CppFortran, Gcc, Gfortran,
-                          Icc, Ifort, Linker)
+from fab.tools.tool import Tool
+from fab.tools.categories import Categories
+from fab.tools.linker import Linker
+from fab.tools.versioning import Fcm, Git, Subversion
 
 
 class ToolRepository(dict):
@@ -53,14 +55,20 @@ class ToolRepository(dict):
 
         # Add the FAB default tools:
         # TODO: sort the defaults so that they actually work (since not all
-        # tools FAB knows about are available). For now, disable Fpp
-        # for cls in [Gcc, Icc, Gfortran, Ifort, Fpp, Cpp, CppFortran]:
-        for cls in [Gcc, Icc, Gfortran, Ifort, Cpp, CppFortran]:
+        # tools FAB knows about are available). For now, disable Fpp:
+        # We get circular dependencies if imported at top of the file:
+        # pylint: disable=import-outside-toplevel
+        from fab.tools import (Ar, Cpp, CppFortran, Gcc, Gfortran,
+                               Icc, Ifort, Psyclone, Rsync)
+
+        for cls in [Gcc, Icc, Gfortran, Ifort, Cpp, CppFortran,
+                    Fcm, Git, Subversion, Ar, Psyclone, Rsync]:
             self.add_tool(cls)
 
     def add_tool(self, cls: Type[Any]):
         '''Creates an instance of the specified class and adds it
         to the tool repository.
+
         :param cls: the tool to instantiate.
         '''
 
@@ -79,14 +87,14 @@ class ToolRepository(dict):
             linker = Linker(name=f"linker-{tool.name}", compiler=tool)
             self[linker.category].append(linker)
 
-    def get_tool(self, category: Categories, name: str):
-        '''Returns the tool with a given name in the specified category.
+    def get_tool(self, category: Categories, name: str) -> Tool:
+        ''':returns: the tool with a given name in the specified category.
 
         :param category: the name of the category in which to look
             for the tool.
         :param name: the name of the tool to find.
 
-        :raises KeyError: if the category is not known.
+        :raises KeyError: if there is no tool in this category.
         :raises KeyError: if no tool in the given category has the
             requested name.
         '''
@@ -104,6 +112,7 @@ class ToolRepository(dict):
     def set_default_vendor(self, vendor: str):
         '''Sets the default for linker and compilers to be of the
         given vendor.
+
         :param vendor: the vendor name.
         '''
         for category in [Categories.FORTRAN_COMPILER, Categories.C_COMPILER,

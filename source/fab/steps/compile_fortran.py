@@ -8,9 +8,6 @@ Fortran file compilation.
 
 """
 
-# TODO: This has become too complicated. Refactor.
-
-
 import logging
 import os
 import shutil
@@ -20,16 +17,15 @@ from itertools import chain
 from pathlib import Path
 from typing import List, Set, Dict, Tuple, Optional, Union
 
-from fab.artefacts import ArtefactsGetter, FilterBuildTrees
+from fab.artefacts import ArtefactsGetter, ArtefactStore, FilterBuildTrees
 from fab.build_config import BuildConfig, FlagsConfig
 from fab.constants import OBJECT_FILES
 from fab.metrics import send_metric
 from fab.parse.fortran import AnalysedFortran
 from fab.steps import check_for_errors, run_mp, step
-from fab.tools import flags_checksum
-from fab.newtools import Categories, Compiler
-from fab.util import CompiledFile, log_or_dot_finish, log_or_dot, Timer, by_type, \
-    file_checksum
+from fab.tools import Categories, Compiler, Flags
+from fab.util import (CompiledFile, log_or_dot_finish, log_or_dot, Timer,
+                      by_type, file_checksum)
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +121,7 @@ def handle_compiler_args(config: BuildConfig, common_flags=None,
     compiler = config.tool_box[Categories.FORTRAN_COMPILER]
     logger.info(f'fortran compiler is {compiler} {compiler.get_version()}')
 
-    # collate the flags from 1) compiler env, 2) flags env and 3) params
+    # Collate the flags from 1) flags env and 2) parameters.
     env_flags = os.getenv('FFLAGS', '').split()
     common_flags = env_flags + (common_flags or [])
     flags_config = FlagsConfig(common_flags=common_flags, path_flags=path_flags)
@@ -192,7 +188,9 @@ def get_compile_next(compiled: Dict[Path, CompiledFile], uncompiled: Set[Analyse
     return compile_next
 
 
-def store_artefacts(compiled_files: Dict[Path, CompiledFile], build_lists: Dict[str, List], artefact_store):
+def store_artefacts(compiled_files: Dict[Path, CompiledFile],
+                    build_lists: Dict[str, List],
+                    artefact_store: ArtefactStore):
     """
     Create our artefact collection; object files for each compiled file, per root symbol.
 
@@ -229,7 +227,7 @@ def process_file(arg: Tuple[AnalysedFortran, MpCommonArgs]) \
         analysed_file, mp_common_args = arg
         config = mp_common_args.config
         compiler = config.tool_box[Categories.FORTRAN_COMPILER]
-        flags = mp_common_args.flags.flags_for_path(path=analysed_file.fpath, config=config)
+        flags = Flags(mp_common_args.flags.flags_for_path(path=analysed_file.fpath, config=config))
 
         mod_combo_hash = _get_mod_combo_hash(analysed_file, compiler=compiler)
         obj_combo_hash = _get_obj_combo_hash(analysed_file,
@@ -277,7 +275,6 @@ def process_file(arg: Tuple[AnalysedFortran, MpCommonArgs]) \
         compiled_file = CompiledFile(input_fpath=analysed_file.fpath, output_fpath=obj_file_prebuild)
         artefacts = [obj_file_prebuild] + mod_file_prebuilds
 
-    # todo: probably better to record both mod and obj metrics
     metric_name = "compile fortran"
     if mp_common_args.syntax_only:
         metric_name += " syntax-only"
@@ -291,7 +288,7 @@ def process_file(arg: Tuple[AnalysedFortran, MpCommonArgs]) \
 
 
 def _get_obj_combo_hash(analysed_file, mp_common_args: MpCommonArgs,
-                        compiler: Compiler, flags):
+                        compiler: Compiler, flags: Flags):
     # get a combo hash of things which matter to the object file we define
     # todo: don't just silently use 0 for a missing dep hash
     mod_deps_hashes = {
@@ -299,7 +296,7 @@ def _get_obj_combo_hash(analysed_file, mp_common_args: MpCommonArgs,
     try:
         obj_combo_hash = sum([
             analysed_file.file_hash,
-            flags_checksum(flags),
+            flags.checksum(),
             sum(mod_deps_hashes.values()),
             compiler.get_hash(),
         ])
@@ -324,9 +321,10 @@ def compile_file(analysed_file, flags, output_fpath, mp_common_args):
     """
     Call the compiler.
 
-    The current working folder for the command is set to the folder where the source file lives.
-    This is done to stop the compiler inserting folder information into the mod files,
-    which would cause them to have different checksums depending on where they live.
+    The current working folder for the command is set to the folder where the
+    source file lives when compile_file is called. This is done to stop the
+    compiler inserting folder information into the mod files, which would
+    cause them to have different checksums depending on where they live.
 
     """
     output_fpath.parent.mkdir(parents=True, exist_ok=True)
@@ -340,7 +338,6 @@ def compile_file(analysed_file, flags, output_fpath, mp_common_args):
                           syntax_only=mp_common_args.syntax_only)
 
 
-# todo: move this
 def get_mod_hashes(analysed_files: Set[AnalysedFortran], config) -> Dict[str, int]:
     """
     Get the hash of every module file defined in the list of analysed files.

@@ -12,21 +12,26 @@ classes for cpp and fpp.
 from pathlib import Path
 from typing import List, Union
 
-from fab.newtools.categories import Categories
-from fab.newtools.tool import Tool
+from fab.tools.categories import Categories
+from fab.tools.tool import Tool
 
 
 class Preprocessor(Tool):
     '''This is the base class for any preprocessor.
+
+    :param name: the name of the preprocessor.
+    :param exec_name: the name of the executable.
+    :param category: the category (C_PREPROCESSOR or FORTRAN_PREPROCESSOR)
     '''
 
     def __init__(self, name: str, exec_name: str, category: Categories):
         super().__init__(name, exec_name, category)
         self._version = None
 
-    def check_available(self):
-        '''Checks if the compiler is available. We do this by requesting the
-        compiler version.
+    def check_available(self) -> bool:
+        '''
+        :returns: whether the preprocessor is available or not. We do
+            this by requesting the compiler version.
         '''
         try:
             self.run("--version")
@@ -35,20 +40,20 @@ class Preprocessor(Tool):
         return True
 
     def preprocess(self, input_file: Path, output_file: Path,
-                   add_flags: Union[None, List[str]] = None):
+                   add_flags: Union[None, List[Union[Path, str]]] = None):
         '''Calls the preprocessor to process the specified input file,
         creating the requested output file.
+
         :param input_file: input file.
         :param output_file: the output filename.
         :param add_flags: List with additional flags to be used.
         '''
+        params: List[Union[str, Path]] = []
         if add_flags:
             # Make a copy to avoid modifying the caller's list
             params = add_flags[:]
-        else:
-            params = []
         # Input and output files come as the last two parameters
-        params.extend([str(input_file), str(output_file)])
+        params.extend([input_file, output_file])
 
         return self.run(additional_parameters=params)
 

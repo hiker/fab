@@ -4,35 +4,54 @@
 # which you should have received as part of this distribution
 ##############################################################################
 
-"""This is the base class for all tools, i.e. compiler, preprocessor, linkers.
-It provides basic
+"""This file contains the base class for all tools, i.e. compiler,
+preprocessor, linker, archiver, Psyclone, rsync, versioning tools.
 
+Each tool belongs to one category (e.g. FORTRAN_COMPILER). This category
+is used when adding a tool to a ToolRepository or ToolBox.
+It provides basic support for running a binary, and keeping track if
+a tool is actually available.
 """
+
 from abc import abstractmethod
 import logging
 from pathlib import Path
 import subprocess
 from typing import Dict, List, Optional, Union
 
-from fab.newtools.categories import Categories
-from fab.newtools.flags import Flags
+from fab.tools.categories import Categories
+from fab.tools.flags import Flags
 
 
 class Tool:
     '''This is the base class for all tools. It stores the name of the tool,
     the name of the executable, and provides a `run` method.
+
+    :param name: name of the tool.
+    :param exec_name: name of the executable to start.
+    :param category: the Category to which this tool belongs.
     '''
 
-    def __init__(self, name: str, exec_name: str, category: Categories):
+    def __init__(self, name: str, exec_name: str,
+                 category: Categories = Categories.MISC):
         self._logger = logging.getLogger(__name__)
         self._name = name
         self._exec_name = exec_name
         self._flags = Flags()
         self._category = category
+
+        # This flag keeps track if a tool is available on the system or not.
+        # A value of `None` means that it has not been tested if a tool works
+        # or not. It will be set to the output of `check_available` when
+        # querying the `is_available` property.
+        # If `_is_available` is False, any call to `run` will immediately
+        # raise a RuntimeError. As long as it is still set to None (or True),
+        # the `run` method will work, allowing the `check_available` method
+        # to use `run` to determine if a tool is available or not.
         self._is_available: Optional[bool] = None
 
     @abstractmethod
-    def check_available(self):
+    def check_available(self) -> bool:
         '''An abstract method to check if this tool is available in the system.
         '''
 
@@ -43,7 +62,7 @@ class Tool:
         to avoid testing a tool more than once.
 
         :returns: whether the tool is available (i.e. installed and
-        working).
+            working).
         '''
         if self._is_available is None:
             self._is_available = self.check_available()
@@ -90,7 +109,8 @@ class Tool:
         return f"{type(self).__name__} - {self._name}: {self._exec_name}"
 
     def run(self,
-            additional_parameters: Optional[Union[str, List[str]]] = None,
+            additional_parameters: Optional[
+                Union[str, List[Union[Path, str]]]] = None,
             env: Optional[Dict[str, str]] = None,
             cwd: Optional[Union[Path, str]] = None,
             capture_output=True) -> str:
@@ -107,6 +127,7 @@ class Tool:
             If True, capture and return stdout. If False, the command will
             print its output directly to the console.
 
+        :raises RuntimeError: if the code is not available.
         :raises RuntimeError: if the return code of the executable is not 0.
         """
 
@@ -115,11 +136,23 @@ class Tool:
             if isinstance(additional_parameters, str):
                 command.append(additional_parameters)
             else:
-                command.extend(additional_parameters)
+                # Convert everything to a str, this is useful for supporting
+                # paths as additional parameter
+                command.extend(str(i) for i in additional_parameters)
 
+        # self._is_available is None when it is not known yet whether a tool
+        # is available or not. Testing for `False` only means this `run`
+        # function can be used to test if a tool is available.
+        if self._is_available is False:
+            raise RuntimeError(f"Tool '{self.name}' is not available to run "
+                               f"'{command}'.")
         self._logger.debug(f'run_command: {" ".join(command)}')
-        res = subprocess.run(command, capture_output=capture_output,
-                             env=env, cwd=cwd, check=False)
+        try:
+            res = subprocess.run(command, capture_output=capture_output,
+                                 env=env, cwd=cwd, check=False)
+        except FileNotFoundError as err:
+            raise RuntimeError(f"Command '{command}' could not be "
+                               f"executed.") from err
         if res.returncode != 0:
             msg = (f'Command failed with return code {res.returncode}:\n'
                    f'{command}')
@@ -136,6 +169,11 @@ class Tool:
 class VendorTool(Tool):
     '''A tool that has a vendor attached to it (typically compiler
     and linker).
+
+    :param name: name of the tool.
+    :param exec_name: name of the executable to start.
+    :param vendor: name of the vendor.
+    :param category: the Category to which this tool belongs.
     '''
     def __init__(self, name: str, exec_name: str, vendor: str,
                  category: Categories):
@@ -144,5 +182,11 @@ class VendorTool(Tool):
 
     @property
     def vendor(self) -> str:
-        '''Returns the vendor of this compiler.'''
+        ''':returns: the vendor of this tool.'''
         return self._vendor
+
+    @abstractmethod
+    def check_available(self) -> bool:
+        '''An abstract method to check if this tool is available in the system.
+        Needs to be declared again to make pylint happy.
+        '''

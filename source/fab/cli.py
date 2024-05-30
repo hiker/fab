@@ -23,7 +23,7 @@ from fab.steps.compile_fortran import compile_fortran
 from fab.steps.find_source_files import find_source_files
 from fab.steps.grab.folder import grab_folder
 from fab.steps.preprocess import preprocess_c, preprocess_fortran
-from fab.newtools import ToolBox
+from fab.tools import Categories, ToolBox, ToolRepository
 from fab.util import common_arg_parser
 
 
@@ -32,11 +32,21 @@ def _generic_build_config(folder: Path, kwargs=None) -> BuildConfig:
     if kwargs:
         project_label = kwargs.pop('project_label', 'zero_config_build') or project_label
 
+    # Set the default Fortran compiler as linker (otherwise e.g. the
+    # C compiler might be used in linking, requiring additional flags)
+    tr = ToolRepository()
+    fc = tr.get_default(Categories.FORTRAN_COMPILER)
+    # TODO: This assumes a mapping of compiler name to the corresponding
+    # linker name (i.e. `linker-gfortran` or `linker-ifort`). Still, that's
+    # better than hard-coding gnu here.
+    linker = tr.get_tool(Categories.LINKER, f"linker-{fc.name}")
+    tool_box = ToolBox()
+    tool_box.add_tool(fc)
+    tool_box.add_tool(linker)
     # Within the fab workspace, we'll create a project workspace.
     # Ideally we'd just use folder.name, but to avoid clashes, we'll use the full absolute path.
-    linker_flags = ['-lgfortran']
     with BuildConfig(project_label=project_label,
-                     tool_box=ToolBox(), **kwargs) as config:
+                     tool_box=tool_box, **kwargs) as config:
         grab_folder(config, folder)
         find_source_files(config)
         root_inc_files(config)  # JULES helper, get rid of this eventually
@@ -46,7 +56,10 @@ def _generic_build_config(folder: Path, kwargs=None) -> BuildConfig:
         analyse(config, find_programs=True)
         compile_fortran(config)
         compile_c(config)
-        link_exe(config, flags=linker_flags)
+        # If ifort should be used, it might need the flag `-nofor-main` in
+        # case of a mixed language compilation (main program in C, linking
+        # with ifort).
+        link_exe(config, flags=[])
 
     return config
 

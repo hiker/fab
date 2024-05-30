@@ -7,7 +7,9 @@
 '''This file contains the ToolBox class.
 '''
 
-from fab.newtools import Categories, Tool, ToolRepository
+from fab.tools.categories import Categories
+from fab.tools.tool import Tool
+from fab.tools.tool_repository import ToolRepository
 
 
 class ToolBox:
@@ -25,10 +27,9 @@ class ToolBox:
     def add_tool(self, tool: Tool):
         '''Adds a tool for a given category.
 
-        :param category: the category for which to add a tool
         :param tool: the tool to add.
 
-        :raises RuntimeError: if a tool is added that is not installed
+        :raises RuntimeError: if the tool to be added is not available.
         '''
         if not tool.is_available:
             raise RuntimeError(f"Tool '{tool}' is not available.")

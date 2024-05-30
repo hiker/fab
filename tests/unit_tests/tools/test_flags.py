@@ -9,7 +9,7 @@
 
 import pytest
 
-from fab.newtools import Flags
+from fab.tools import Flags
 
 
 def test_flags_constructor():
@@ -50,3 +50,10 @@ def test_remove_flags():
         with pytest.warns(UserWarning, match="Removing managed flag"):
             flags.remove_flag("-J", has_parameter=True)
         assert flags == expected
+
+
+def test_flags_checksum():
+    '''Tests computation of the checksum.'''
+    # I think this is a poor testing pattern.
+    flags = Flags(['one', 'two', 'three', 'four'])
+    assert flags.checksum() == 3011366051
