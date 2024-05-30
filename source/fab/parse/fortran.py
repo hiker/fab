@@ -284,36 +284,15 @@ class FortranAnalyser(FortranAnalyserBase):
         # TODO: error handling in case we catch a genuine comment
         # TODO: separate this project-specific code from the generic f analyser?
         depends_str = "DEPENDS ON:"
-        comment = obj.items[0].strip()
-        if depends_str in comment:
+        if depends_str in obj.items[0]:
             self.depends_on_comment_found = True
-            dep = comment.split(depends_str)[-1].strip()
+            dep = obj.items[0].split(depends_str)[-1].strip()
             # with .o means a c file
             if dep.endswith(".o"):
                 analysed_file.mo_commented_file_deps.add(dep.replace(".o", ".c"))
             # without .o means a fortran symbol
             else:
                 analysed_file.add_symbol_dep(dep)
-        if comment[:2] == "!$":
-            # Check if it is a use statement with an OpenMP sentinel:
-            # Use fparser's string reader to discard potential comments
-            reader = FortranStringReader(comment[2:])
-            line = reader.next()
-            try:
-                # match returns a 5-tuple, the third one being the module name
-                module_name = Use_Stmt.match(line.strline)[2]
-                module_name = module_name.string
-            except Exception:
-                # Not a use statement in a sentinel, ignore:
-                return
-
-            # Register the module name
-            if module_name in self.ignore_mod_deps:
-                logger.debug(f"ignoring use of {module_name}")
-                return
-            if module_name.lower() not in self._intrinsic_modules:
-                # found a dependency on fortran
-                analysed_file.add_module_dep(module_name)
 
     def _process_subroutine_or_function(self, analysed_file, fpath, obj):
         # binding?

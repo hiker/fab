@@ -13,7 +13,7 @@ which need to be processed. Most steps have sensible defaults and can be configu
 """
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterable, Union, Dict, List, Set
+from typing import Iterable, Union, Dict, List
 
 from fab.constants import BUILD_TREES, CURRENT_PREBUILDS
 from fab.dep_tree import filter_source_tree, AnalysedDependent
