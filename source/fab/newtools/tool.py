@@ -65,12 +65,6 @@ class Tool:
     def exec_name(self) -> str:
         ''':returns: the name of the executable.'''
         return self._exec_name
-    
-    @exec_name.setter
-    def exec_name(self, new_exec_name: str):
-        '''Sets a new exec_name. This is usually for use of wrappers.
-        :param new_exec_name: name of a new executable or a wrapper script.'''
-        self._exec_name = new_exec_name
 
     @property
     def name(self) -> str:
