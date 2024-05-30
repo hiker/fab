@@ -54,8 +54,10 @@ from fab.util import TimerLogger, by_type
 logger = logging.getLogger(__name__)
 
 DEFAULT_SOURCE_GETTER = CollectionConcat([
-    ArtefactStore.FORTRAN_BUILD_FILES,
-    ArtefactStore.C_BUILD_FILES,
+    SuffixFilter('all_source', '.f90'),
+    'preprocessed_c',
+    'preprocessed_fortran',
+
     # todo: this is lfric stuff so might be better placed elsewhere
     SuffixFilter('psyclone_output', '.f90'),
     'preprocessed_psyclone',  # todo: this is no longer a collection, remove
